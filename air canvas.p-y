@@ -1,0 +1,108 @@
+import cv2
+import numpy as np
+import mediapipe as mp
+
+Initialize MediaPipe Hands
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7)
+mp_draw = mp.solutions.drawing_utils
+
+Initialize the canvas
+canvas = None
+
+Colors (B, G, R) format
+colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 255, 255)] # Blue, Green, Red, Yellow
+color_index = 0
+current_color = colors[color_index]
+
+Start webcam
+cap = cv2.VideoCapture(0)
+
+print("Air Canvas Started!")
+print("Controls:")
+print("- Draw by holding up your index finger.")
+print("- Press 'b' for Blue")
+print("- Press 'g' for Green")
+print("- Press 'r' for Red")
+print("- Press 'y' for Yellow")
+print("- Press 'c' to Clear Canvas")
+print("- Press 'q' to Quit")
+
+prev_x, prev_y = 0, 0
+
+while True:
+ret, frame = cap.read()
+if not ret:
+break
+
+# Flip frame horizontally for natural movement
+frame = cv2.flip(frame, 1)
+
+if canvas is None:
+canvas = np.zeros_like(frame)
+
+# Convert frame to RGB for MediaPipe
+rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+result = hands.process(rgb_frame)
+
+# Draw color indicator on screen
+cv2.circle(frame, (50, 50), 30, current_color, -1)
+cv2.putText(frame, "Current Color", (90, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+if result.multi_hand_landmarks:
+for hand_landmarks in result.multi_hand_landmarks:
+mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+
+# Get coordinates of Index Finger Tip (Landmark 8) and Thumb Tip (Landmark 4)
+h, w, c = frame.shape
+index_x, index_y = int(hand_landmarks.landmark[8].x * w), int(hand_landmarks.landmark[8].y * h)
+thumb_x, thumb_y = int(hand_landmarks.landmark[4].x * w), int(hand_landmarks.landmark[4].y * h)
+
+# Calculate distance between index tip and thumb tip
+distance = np.sqrt((index_x - thumb_x)2 + (index_y - thumb_y) 2)
+
+# If fingers are far apart, consider it "drawing mode"
+if distance > 40:
+cv2.circle(frame, (index_x, index_y), 10, current_color, cv2.FILLED)
+
+if prev_x == 0 and prev_y == 0:
+prev_x, prev_y = index_x, index_y
+
+# Draw on the canvas
+cv2.line(canvas, (prev_x, prev_y), (index_x, index_y), current_color, thickness=5)
+
+prev_x, prev_y = index_x, index_y
+else:
+# Reset previous coordinates if hand is not detected
+prev_x, prev_y = 0, 0
+
+# Combine the frame and the canvas
+# Create a mask of the canvas
+imgGray = cv2.cvtColor(canvas, cv2.COLOR_BGR2GRAY)
+_, imgInv = cv2.threshold(imgGray, 50, 255, cv2.THRESH_BINARY_INV)
+imgInv = cv2.cvtColor(imgInv, cv2.COLOR_GRAY2BGR)
+
+# Overlay the canvas onto the frame
+frame = cv2.bitwise_and(frame, imgInv)
+frame = cv2.bitwise_or(frame, canvas)
+
+cv2.imshow("Air Canvas", frame)
+
+# Keyboard controls
+key = cv2.waitKey(1) & 0xFF
+if key == ord('q'):
+break
+elif key == ord('c'):
+canvas = np.zeros_like(frame) # Clear canvas
+elif key == ord('b'):
+current_color = colors[0] # Blue
+elif key == ord('g'):
+current_color = colors[1] # Green
+elif key == ord('r'):
+current_color = colors[2] # Red
+elif key == ord('y'):
+current_color = colors[3] # Yellow
+
+cap.release()
+cv2.destroyAllWindows()
+
